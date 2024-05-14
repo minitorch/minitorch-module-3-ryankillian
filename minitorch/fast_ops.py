@@ -308,7 +308,6 @@ def tensor_reduce(
 
     return njit(parallel=True)(_reduce)  # type: ignore
 
-
 def _tensor_matrix_multiply(
     out: Storage,
     out_shape: Shape,
@@ -325,16 +324,13 @@ def _tensor_matrix_multiply(
 
     Should work for any tensor shapes that broadcast as long as
 
-    ```
     assert a_shape[-1] == b_shape[-2]
-    ```
 
     Optimizations:
 
     * Outer loop in parallel
     * No index buffers or function calls
     * Inner loop should have no global writes, 1 multiply.
-
 
     Args:
         out (Storage): storage for `out` tensor
@@ -350,11 +346,29 @@ def _tensor_matrix_multiply(
     Returns:
         None : Fills in `out`
     """
+    assert a_shape[-1] == b_shape[-2], "Shapes are not aligned for matrix multiplication"
+
+    batch_size = out_shape[0]
+    out_rows = out_shape[1]
+    out_cols = out_shape[2]
+    common_dim = a_shape[2]
+
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
 
-    # TODO: Implement for Task 3.2.
-    raise NotImplementedError("Need to implement for Task 3.2")
-
+    for batch_index in prange(batch_size):
+        for row_index in range(out_rows):
+            for col_index in range(out_cols):
+                a_index = batch_index * a_batch_stride + row_index * a_strides[1]
+                b_index = batch_index * b_batch_stride + col_index * b_strides[2]
+                accumulator = 0.0
+                for _ in range(common_dim):
+                    accumulator += a_storage[a_index] * b_storage[b_index]
+                    a_index += a_strides[2]
+                    b_index += b_strides[1]
+                out_position = (
+                    batch_index * out_strides[0] + row_index * out_strides[1] + col_index * out_strides[2]
+                )
+                out[out_position] = accumulator
 
 tensor_matrix_multiply = njit(parallel=True, fastmath=True)(_tensor_matrix_multiply)
